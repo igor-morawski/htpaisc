@@ -1,4 +1,43 @@
-import socket
+
+
+    '''
+    def capture_voltage_frame(self):
+        frame = None
+        try:
+            self.sock.sendto(HTPA_SINGLE_VOLTAGE_FFRAME_MSG.encode(), self.address)
+            packet_a = _ = self.sock.recv(BUFF_SIZE)
+            packet_b = _ = self.sock.recv(BUFF_SIZE)
+            packets = order_packets(packet_a, packet_b)
+            frame = decode_packets_to_list(*packets)
+            if -1 in frame:
+                frame = None
+        except socket.timeout:
+            pass #XXX
+        return frame
+    
+    def toggle_raw_compensated(self):
+        try:
+            self.sock.sendto("t".encode(), self.address)
+            data = _ = self.sock.recv(BUFF_SIZE)
+        except socket.timeout:
+            data = None
+        return data'''
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        import socket
 import threading
 import time
 import signal
@@ -21,7 +60,6 @@ ARRAY_DTYPE = np.float32
 HTPA_IMG_CROP_START = 4
 HTPA_IMG_CROP_END = 28
 
-HUMAN_SKIN_EMMISITIVITY = 0.98
 SOCK_TIMEOUT = 1
 
 MAC_PREFIX = "MAC_"
@@ -140,7 +178,7 @@ class Temperature_Logger(threading.Thread):
                     packet_a = self.device.sock.recv(BUFF_SIZE)
                     packet_b = self.device.sock.recv(BUFF_SIZE)
                     value_l = decode_packets_to_list(*order_packets(packet_a, packet_b))
-                    value_array = np.array(value_l[:1024], dtype=ARRAY_DTYPE).reshape([32,32]) * HTPA_MSG_TEMP_SCALING_TO_CELSIUS/HUMAN_SKIN_EMMISITIVITY
+                    value_array = np.array(value_l[:1024], dtype=ARRAY_DTYPE).reshape([32,32]) * HTPA_MSG_TEMP_SCALING_TO_CELSIUS
                     value_array = value_array[HTPA_IMG_CROP_START:HTPA_IMG_CROP_END, HTPA_IMG_CROP_START:HTPA_IMG_CROP_END]
                     accumulator.append(value_array.max())
                 accumulated_results = np.array(accumulator, ARRAY_DTYPE)
@@ -186,6 +224,19 @@ class Device:
         try:
             self.sock.sendto(HTPA_BIND_MSG.encode(), self.address)
             _ = self.sock.recv(BUFF_SIZE)
+            # READ CALIB
+            self.sock.sendto(HTPA_EEDATA_OUT_MSG.encode(), self.address)
+            eeprom_l = []
+            try:
+                while True:
+                    eedata = self.sock.recv(BUFF_SIZE)
+                    eeprom_l.append(eedata)
+            except socket.timeout: 
+                pass
+            eeprom = b"".join(eeprom_l)
+            self.PTATGradient = struct.unpack('f', eeprom[0x0034:0x0038])[0]
+            self.PTATOffset = struct.unpack('f', eeprom[0x0038:0x003c])[0]
+            # /READ CALIB
             return True
         except socket.timeout:
             htpaisc.utils.print_if_verbose("Could not bind device {}, MAC-ID: {}...".format(self.ip, self.mac), VERBOSE)
@@ -217,7 +268,11 @@ class Temperature_Calibrator:
             packet_a = self.device.sock.recv(BUFF_SIZE)
             packet_b = self.device.sock.recv(BUFF_SIZE)
             value_l = decode_packets_to_list(*order_packets(packet_a, packet_b))
-            value_array = np.array(value_l[:1024], dtype=ARRAY_DTYPE).reshape([32,32]) * HTPA_MSG_TEMP_SCALING_TO_CELSIUS/HUMAN_SKIN_EMMISITIVITY
+            value_array = np.array(value_l[:1024], dtype=ARRAY_DTYPE).reshape([32,32]) * HTPA_MSG_TEMP_SCALING_TO_CELSIUS
+            # 
+            PTAT_av = np.array(value_l[-8:]).mean()
+            TA = (PTAT_av * self.device.PTATGradient + self.device.PTATOffset)*1e-1
+            #
             value_array = value_array[HTPA_IMG_CROP_START:HTPA_IMG_CROP_END, HTPA_IMG_CROP_START:HTPA_IMG_CROP_END]
             return value_array
         except socket.timeout:
@@ -362,3 +417,5 @@ class Device_Manager:
                 return d
         htpaisc.utils.print_if_verbose("Device with MAC-ID {} not connected".format(mac))
         return None
+
+30.369999
