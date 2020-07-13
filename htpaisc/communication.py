@@ -114,7 +114,32 @@ def decode_packets_to_str(packet1, packet2) -> str:
     return packet_txt
 
 
-class Temperature_Logger(threading.Thread):
+    
+class Capture:
+    def __init__(self, device):
+        self.device = device
+    
+    def __enter__(self):
+        self.device.sock.sendto(HTPA_STREAM_MSG.encode(), self.device.address)
+        return self
+    
+    def __exit__(self, type, value, traceback):
+        pass
+
+    def capture(self):
+        try:
+            packet_a = self.device.sock.recv(BUFF_SIZE)
+            packet_b = self.device.sock.recv(BUFF_SIZE)
+            value_l = decode_packets_to_list(*order_packets(packet_a, packet_b))
+            value_array = np.array(value_l[:1024], dtype=ARRAY_DTYPE).reshape([32,32]) * HTPA_MSG_TEMP_SCALING_TO_CELSIUS/HUMAN_SKIN_EMMISITIVITY
+            value_array = value_array[HTPA_IMG_CROP_START:HTPA_IMG_CROP_END, HTPA_IMG_CROP_START:HTPA_IMG_CROP_END]
+            return value_array
+        except socket.timeout:
+            raise Exception("Timed-out while waiting for a frame from {}".format(self.device.mac))
+
+        
+
+class Temperature_Logger(threading.Thread): 
     """
     Logs temperature # TODO DOCS
     """

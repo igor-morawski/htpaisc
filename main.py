@@ -28,7 +28,6 @@ def logging(args):
         raise Exception("No devices found while scanning")
         
 def calibration(args):
-    htpaisc.communication.VERBOSE = args.verbose
     device_manager = htpaisc.communication.Device_Manager(args.log_dir)
     if device_manager.scan(bcast_addr="140.123.112.255"):
         device_manager.connect_all_devices()
